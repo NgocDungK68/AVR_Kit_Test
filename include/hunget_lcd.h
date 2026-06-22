@@ -87,7 +87,6 @@ void LCD4_INIT(unsigned char cursor, unsigned char blink)
     unsigned char display_control;
 
     LCD4_CTRL_DDR |= (1 << LCD4_RS) | (1 << LCD4_RW) | (1 << LCD4_E);
-
     LCD4_DATA_DDR |= 0xF0;
     LCD4_DATA_PORT |= 0x0F;
 
@@ -107,14 +106,8 @@ void LCD4_INIT(unsigned char cursor, unsigned char blink)
     LCD4_OUT_NIBBLE(0x02);
     _delay_us(200);
 
-    /*
-     * 4-bit, 2 dòng, font 5x8.
-     */
     LCD4_OUT_CMD(0x28);
 
-    /*
-     * Display ON, cursor/blink tùy tham số.
-     */
     display_control = 0x0C;
 
     if (cursor)
@@ -128,15 +121,7 @@ void LCD4_INIT(unsigned char cursor, unsigned char blink)
     }
 
     LCD4_OUT_CMD(display_control);
-
-    /*
-     * Clear display.
-     */
     LCD4_OUT_CMD(0x01);
-
-    /*
-     * Entry mode.
-     */
     LCD4_OUT_CMD(0x06);
 }
 
