@@ -9,10 +9,12 @@
 #include <util/delay.h>
 
 /*
- * Kết nối LCD 1602 trên kit:
+ * LCD 1602 trên kit, chế độ 4-bit:
+ *
  * RS -> PD6
  * RW -> PD5
  * E  -> PD7
+ *
  * D4 -> PC4
  * D5 -> PC5
  * D6 -> PC6
@@ -42,7 +44,7 @@ static void LCD4_ENABLE_PULSE(void)
     _delay_us(2);
 
     LCD4_CTRL_PORT &= ~(1 << LCD4_E);
-    _delay_us(50);
+    _delay_us(80);
 }
 
 static void LCD4_OUT_NIBBLE(unsigned char nibble)
@@ -65,7 +67,7 @@ void LCD4_OUT_CMD(unsigned char cmd)
     }
     else
     {
-        _delay_us(50);
+        _delay_us(80);
     }
 }
 
@@ -77,7 +79,7 @@ void LCD4_OUT_DATA(unsigned char data)
     LCD4_OUT_NIBBLE(data >> 4);
     LCD4_OUT_NIBBLE(data);
 
-    _delay_us(50);
+    _delay_us(80);
 }
 
 void LCD4_INIT(unsigned char cursor, unsigned char blink)
@@ -85,26 +87,34 @@ void LCD4_INIT(unsigned char cursor, unsigned char blink)
     unsigned char display_control;
 
     LCD4_CTRL_DDR |= (1 << LCD4_RS) | (1 << LCD4_RW) | (1 << LCD4_E);
+
     LCD4_DATA_DDR |= 0xF0;
+    LCD4_DATA_PORT |= 0x0F;
 
     LCD4_CTRL_PORT &= ~((1 << LCD4_RS) | (1 << LCD4_RW) | (1 << LCD4_E));
 
-    _delay_ms(20);
+    _delay_ms(50);
 
     LCD4_OUT_NIBBLE(0x03);
     _delay_ms(5);
 
     LCD4_OUT_NIBBLE(0x03);
-    _delay_us(150);
+    _delay_us(200);
 
     LCD4_OUT_NIBBLE(0x03);
-    _delay_us(150);
+    _delay_us(200);
 
     LCD4_OUT_NIBBLE(0x02);
-    _delay_us(150);
+    _delay_us(200);
 
+    /*
+     * 4-bit, 2 dòng, font 5x8.
+     */
     LCD4_OUT_CMD(0x28);
 
+    /*
+     * Display ON, cursor/blink tùy tham số.
+     */
     display_control = 0x0C;
 
     if (cursor)
@@ -118,7 +128,15 @@ void LCD4_INIT(unsigned char cursor, unsigned char blink)
     }
 
     LCD4_OUT_CMD(display_control);
+
+    /*
+     * Clear display.
+     */
     LCD4_OUT_CMD(0x01);
+
+    /*
+     * Entry mode.
+     */
     LCD4_OUT_CMD(0x06);
 }
 

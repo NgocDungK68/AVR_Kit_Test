@@ -3,6 +3,24 @@
 
 #include <avr/io.h>
 
+/*
+ * Điện áp tham chiếu ADC.
+ * Nếu đo J8 5V ra đúng 5.00V thì để 5000.
+ * Nếu đo ra 4.95V thì sửa thành 4950.
+ */
+#ifndef ADC_VREF_MV
+#define ADC_VREF_MV 5000UL
+#endif
+
+void ADC_PRES(unsigned char prescaler);
+void ADC_AVCC(void);
+void ADC_IN(unsigned char channel);
+void ADC_STA_CONVERT(void);
+unsigned int ADC_READ(unsigned char channel);
+unsigned int ADC_READ_AVG(unsigned char channel, unsigned char sample_count);
+unsigned int ADC_TO_MV(unsigned int adc_value);
+unsigned int ADC_LM35_TEMP_X10(unsigned int adc_value);
+
 void ADC_PRES(unsigned char prescaler)
 {
     ADCSRA |= (1 << ADEN);
@@ -45,14 +63,14 @@ void ADC_PRES(unsigned char prescaler)
 void ADC_AVCC(void)
 {
     /*
-     * Dùng AVCC làm điện áp tham chiếu ADC.
-     * Tức Vref khoảng 5V của kit.
+     * REFS1 = 0, REFS0 = 1
+     * Vref = AVCC, tức dùng nguồn 5V của kit làm tham chiếu.
      */
     ADMUX &= ~((1 << REFS1) | (1 << REFS0));
     ADMUX |= (1 << REFS0);
 
     /*
-     * Kết quả căn phải.
+     * ADLAR = 0, kết quả ADC căn phải.
      */
     ADMUX &= ~(1 << ADLAR);
 }
@@ -63,7 +81,7 @@ void ADC_IN(unsigned char channel)
 
     /*
      * Giữ lại REFS1, REFS0, ADLAR.
-     * Chỉ đổi phần chọn kênh ADC.
+     * Chỉ thay phần chọn kênh ADC.
      */
     ADMUX &= 0xE0;
     ADMUX |= channel;
@@ -85,9 +103,9 @@ unsigned int ADC_READ(unsigned char channel)
     ADC_IN(channel);
 
     /*
-     * Delay rất nhỏ sau khi đổi kênh ADC.
+     * Chờ rất ngắn sau khi chọn kênh ADC.
      */
-    for (wait_count = 0; wait_count < 100; wait_count++)
+    for (wait_count = 0; wait_count < 200; wait_count++)
     {
         __asm__ __volatile__("nop");
     }
@@ -108,7 +126,7 @@ unsigned int ADC_READ_AVG(unsigned char channel, unsigned char sample_count)
     }
 
     /*
-     * Đọc bỏ lần đầu sau khi chọn kênh.
+     * Đọc bỏ lần đầu để ADC ổn định sau khi chọn kênh.
      */
     ADC_READ(channel);
 
@@ -126,9 +144,9 @@ unsigned int ADC_TO_MV(unsigned int adc_value)
 
     /*
      * ADC 10-bit:
-     * điện áp mV = ADC * 5000 / 1024
+     * mV = ADC * Vref / 1024
      */
-    mv = (unsigned long)adc_value * 5000UL;
+    mv = (unsigned long)adc_value * ADC_VREF_MV;
     mv = mv + 512UL;
     mv = mv / 1024UL;
 
@@ -145,10 +163,11 @@ unsigned int ADC_LM35_TEMP_X10(unsigned int adc_value)
      * LM35:
      * 10mV = 1°C
      *
-     * Nếu hiển thị dạng x10:
-     * 250mV = 25.0°C = 250
+     * Nếu nhiệt độ dạng x10:
+     * 25.0°C = 250
      *
-     * Vậy voltage_mv chính là temp_x10.
+     * 250mV từ LM35 tương ứng 25.0°C.
+     * Vì vậy voltage_mv chính là temp_x10.
      */
     return voltage_mv;
 }

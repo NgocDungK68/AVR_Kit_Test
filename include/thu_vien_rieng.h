@@ -2,28 +2,17 @@
 #define THU_VIEN_RIENG_H
 
 #include <avr/io.h>
+#include "hunget_lcd.h"
+#include "dht11.h"
 
-/*
- * Dùng PA1 / ADC1 để đọc LM35.
- * Không dùng PA0 vì PA0 trên kit có biến trở VR1.
- */
-#define LM35_ADC_CHANNEL 1
-
-/*
- * Nếu nhiệt độ bị lệch, chỉnh offset ở đây.
- * Đơn vị: 0.1°C.
- *
- * Ví dụ:
- * LCD báo 32.0°C, nhiệt kế thật là 29.0°C
- * => cao hơn 3.0°C
- * => đặt -30
- */
-#define TEMP_CAL_OFFSET_X10 0
+#ifndef FRE
+#define FRE 8
+#endif
 
 void INIT(void);
-void LM35_2_LCD(void);
+void DHT11_2_LCD(void);
 void LCD_CLEAR_LINE(unsigned char row);
-void LCD_PRINT_TEMP_X10(unsigned int temp_x10);
+void LCD_PRINT_2DIGIT(unsigned char value);
 void DELAY_MS(unsigned int mili_count);
 
 void INIT(void)
@@ -37,21 +26,14 @@ void INIT(void)
     PORTD &= ~((1 << PD5) | (1 << PD6) | (1 << PD7));
 
     DDRC |= 0xF0;
-    PORTC &= 0x0F;
+    PORTC |= 0x0F;
 
     /*
-     * Port A làm input ADC.
-     * Không bật pull-up để đọc analog đúng.
+     * DHT11 DATA dùng PB4.
+     * Ban đầu để input + pull-up.
      */
-    DDRA = 0x00;
-    PORTA = 0x00;
-
-    /*
-     * Khởi tạo ADC bằng thư viện hunget_adc.h
-     */
-    ADC_PRES(128);
-    ADC_AVCC();
-    ADC_IN(LM35_ADC_CHANNEL);
+    DHT11_DDR &= ~(1 << DHT11_BIT);
+    DHT11_PORT |= (1 << DHT11_BIT);
 }
 
 void LCD_CLEAR_LINE(unsigned char row)
@@ -60,96 +42,93 @@ void LCD_CLEAR_LINE(unsigned char row)
     LCD4_OUT_STR("                ");
 }
 
-void LCD_PRINT_TEMP_X10(unsigned int temp_x10)
+void LCD_PRINT_2DIGIT(unsigned char value)
 {
-    unsigned int integer_part;
-    unsigned int decimal_part;
-
-    integer_part = temp_x10 / 10;
-    decimal_part = temp_x10 % 10;
-
-    if (integer_part < 10)
+    if (value < 10)
     {
         LCD4_OUT_DATA('0');
-        LCD4_OUT_DEC(integer_part, 1);
-    }
-    else if (integer_part < 100)
-    {
-        LCD4_OUT_DEC(integer_part, 2);
+        LCD4_OUT_DEC(value, 1);
     }
     else
     {
-        LCD4_OUT_DEC(integer_part, 3);
+        LCD4_OUT_DEC(value, 2);
     }
-
-    LCD4_OUT_DATA('.');
-    LCD4_OUT_DEC(decimal_part, 1);
-    LCD4_OUT_DATA('C');
 }
 
-void LM35_2_LCD(void)
+void DHT11_2_LCD(void)
 {
-    unsigned int adc_value;
-    unsigned int temp_x10;
-    int temp_calibrated;
+    unsigned char hum_i;
+    unsigned char hum_d;
+    unsigned char temp_i;
+    unsigned char temp_d;
+    unsigned char status;
 
     LCD4_INIT(0, 0);
     LCD4_OUT_CMD(0x01);
 
     LCD4_CUR_GOTO(1, 0);
-    LCD4_OUT_STR("LM35 TEMP TEST");
+    LCD4_OUT_STR("DHT11 TEST");
 
     LCD4_CUR_GOTO(2, 0);
-    LCD4_OUT_STR("Temp: --.-C");
+    LCD4_OUT_STR("Starting...");
 
-    DELAY_MS(1000);
+    /*
+     * DHT11 cần một chút thời gian ổn định sau khi cấp nguồn.
+     */
+    DELAY_MS(2000);
 
     for (;;)
     {
-        /*
-         * Đọc trung bình 32 mẫu để giảm nhiễu.
-         */
-        adc_value = ADC_READ_AVG(LM35_ADC_CHANNEL, 32);
+        status = DHT11_READ(&hum_i, &hum_d, &temp_i, &temp_d);
 
-        /*
-         * Đổi ADC sang nhiệt độ dạng x10.
-         * Ví dụ:
-         * 253 nghĩa là 25.3°C.
-         */
-        temp_x10 = ADC_LM35_TEMP_X10(adc_value);
-
-        /*
-         * Bù sai số nếu cần.
-         */
-        temp_calibrated = (int)temp_x10 + TEMP_CAL_OFFSET_X10;
-
-        if (temp_calibrated < 0)
+        if (status == DHT11_OK)
         {
-            temp_calibrated = 0;
+            /*
+             * Dòng 1: nhiệt độ.
+             */
+            LCD_CLEAR_LINE(1);
+            LCD4_CUR_GOTO(1, 0);
+            LCD4_OUT_STR("Temp: ");
+            LCD_PRINT_2DIGIT(temp_i);
+            LCD4_OUT_DATA('.');
+            LCD4_OUT_DEC(temp_d, 1);
+            LCD4_OUT_DATA('C');
+
+            /*
+             * Dòng 2: độ ẩm.
+             */
+            LCD_CLEAR_LINE(2);
+            LCD4_CUR_GOTO(2, 0);
+            LCD4_OUT_STR("Hum : ");
+            LCD_PRINT_2DIGIT(hum_i);
+            LCD4_OUT_DATA('.');
+            LCD4_OUT_DEC(hum_d, 1);
+            LCD4_OUT_DATA('%');
+        }
+        else
+        {
+            LCD_CLEAR_LINE(1);
+            LCD4_CUR_GOTO(1, 0);
+            LCD4_OUT_STR("DHT11 ERROR");
+
+            LCD_CLEAR_LINE(2);
+            LCD4_CUR_GOTO(2, 0);
+            LCD4_OUT_STR("Code: ");
+            LCD4_OUT_DEC(status, 1);
         }
 
-        if (temp_calibrated > 999)
-        {
-            temp_calibrated = 999;
-        }
-
-        LCD_CLEAR_LINE(1);
-        LCD4_CUR_GOTO(1, 0);
-        LCD4_OUT_STR("ADC1:");
-        LCD4_OUT_DEC(adc_value, 4);
-
-        LCD_CLEAR_LINE(2);
-        LCD4_CUR_GOTO(2, 0);
-        LCD4_OUT_STR("Temp: ");
-        LCD_PRINT_TEMP_X10((unsigned int)temp_calibrated);
-
-        DELAY_MS(500);
+        /*
+         * DHT11 không nên đọc quá nhanh.
+         * Đọc mỗi 2 giây là ổn.
+         */
+        DELAY_MS(2000);
     }
 }
 
 void DELAY_MS(unsigned int mili_count)
 {
-    unsigned int i, j;
+    unsigned int i;
+    unsigned int j;
 
     mili_count = mili_count * FRE;
 
