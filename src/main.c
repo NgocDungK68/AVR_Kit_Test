@@ -12,7 +12,6 @@
  * APP_BUTTON_LED:
  *   Bấm nút PB1-PB4, LED 7 thanh hiện số 1-4,
  *   dãy LED đơn sáng theo từng cặp.
- *   Có return push_button: nhả nút vẫn giữ trạng thái vừa bấm.
  *   Cắm JP1, JP2. Không dùng LCD.
  *
  * APP_DHT_LCD:
@@ -22,14 +21,20 @@
  * APP_DHT_AND_LED_NO_LCD:
  *   DHT11 vẫn đọc, LED đơn + LED 7 thanh vẫn chạy.
  *   Cắm JP1, JP2. Không dùng LCD.
+ *
+ * APP_UART_USB_LCD:
+ *   Giao tiếp máy tính qua UART-USB CP2102.
+ *   Gửi text lên Serial Monitor và dịch chữ trên LCD.
+ *   Tháo JP1, JP2. Dùng LCD.
  */
 
 #define APP_LED_DEMO              1
 #define APP_BUTTON_LED            2
 #define APP_DHT_LCD               3
 #define APP_DHT_AND_LED_NO_LCD    4
+#define APP_UART_USB_LCD          5
 
-#define APP_MODE APP_DHT_LCD
+#define APP_MODE APP_UART_USB_LCD
 
 /*
  * Biến toàn cục lưu phím đang/đã được nhấn.
@@ -38,6 +43,7 @@
 unsigned char push_button = 0;
 
 #include "hunget_lcd.h"
+#include "hunget_uart.h"
 #include "dht11.h"
 #include "thu_vien_rieng.h"
 
@@ -62,6 +68,11 @@ int main(void)
 
     INIT_DHT_LED_NO_LCD();
     DHT11_AND_LED_APP();
+
+#elif APP_MODE == APP_UART_USB_LCD
+
+    INIT_UART_USB_LCD();
+    UART_USB_LCD_APP();
 
 #else
 

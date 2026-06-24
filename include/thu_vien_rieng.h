@@ -32,6 +32,10 @@ void LCD_CLEAR_LINE(unsigned char row);
 void LCD_PRINT_2DIGIT(unsigned char value);
 void DELAY_MS(unsigned int mili_count);
 
+void INIT_UART_USB_LCD(void);
+void UART_USB_LCD_APP(void);
+void LCD4_DIS_SHIFT(unsigned char lcd4_direct, unsigned char lcd4_step);
+
 /*
  * INIT_LED_DEMO()
  * Dùng khi chạy LED đơn + LED 7 thanh.
@@ -499,6 +503,146 @@ void DELAY_MS(unsigned int mili_count)
         for (j = 0; j < 53; j++)
         {
             __asm__ __volatile__("nop");
+        }
+    }
+}
+
+/*
+ * INIT_UART_USB_LCD()
+ * Dùng cho bài giao tiếp máy tính qua UART-USB + LCD dịch chữ.
+ * Tháo JP1, JP2 khi dùng LCD.
+ */
+void INIT_UART_USB_LCD(void)
+{
+    /*
+     * UART:
+     * PD0 = RXD input
+     * PD1 = TXD output
+     */
+    DDRD &= ~(1 << PD0);
+    DDRD |=  (1 << PD1);
+
+    /*
+     * LCD dùng:
+     * RS -> PD6
+     * RW -> PD5
+     * E  -> PD7
+     * D4 -> PC4
+     * D5 -> PC5
+     * D6 -> PC6
+     * D7 -> PC7
+     */
+    DDRD |= (1 << PD5) | (1 << PD6) | (1 << PD7);
+    PORTD &= ~((1 << PD5) | (1 << PD6) | (1 << PD7));
+
+    DDRC |= 0xF0;
+    PORTC |= 0x0F;
+
+    /*
+     * UART 9600 bps, 8 data bit, no parity, 1 stop bit.
+     * F_CPU = 8 MHz => UBRR = 51.
+     */
+    UART_INIT(51, 8, 0, 1);
+}
+
+/*
+ * LCD4_DIS_SHIFT()
+ * Dịch toàn bộ màn hình LCD.
+ *
+ * lcd4_direct = 0: dịch phải
+ * lcd4_direct = 1: dịch trái
+ *
+ * lcd4_step: số bước dịch
+ */
+void LCD4_DIS_SHIFT(unsigned char lcd4_direct, unsigned char lcd4_step)
+{
+    unsigned char i;
+
+    if (lcd4_direct == 0)
+    {
+        /*
+         * Dịch phải.
+         */
+        for (i = 0; i < lcd4_step; i++)
+        {
+            LCD4_OUT_CMD(0x1C);
+        }
+    }
+    else
+    {
+        /*
+         * Dịch trái.
+         */
+        for (i = 0; i < lcd4_step; i++)
+        {
+            LCD4_OUT_CMD(0x18);
+        }
+    }
+}
+
+/*
+ * UART_USB_LCD_APP()
+ * Gửi dữ liệu lên máy tính qua CP2102.
+ * Đồng thời hiển thị và dịch chữ trên LCD1602.
+ */
+void UART_USB_LCD_APP(void)
+{
+    unsigned char shift_count = 0;
+
+    LCD4_INIT(0, 0);
+    LCD4_OUT_CMD(0x01);
+
+    /*
+     * Ghi chuỗi dài hơn 16 ký tự.
+     * LCD chỉ nhìn thấy 16 ký tự đầu,
+     * phần còn lại sẽ hiện ra khi dịch màn hình.
+     */
+    LCD4_CUR_GOTO(1, 0);
+    LCD4_OUT_STR("Tran Ngoc Dung, Dien tu 09 - K68");
+
+    LCD4_CUR_GOTO(2, 0);
+    LCD4_OUT_STR("Vien DTVT, Truong DHBK HN");
+
+    DELAY_MS(1000);
+
+    for (;;)
+    {
+        /*
+         * Gửi dữ liệu lên máy tính.
+         */
+        UART_TRAN_STR("Tran Ngoc Dung, Dien tu 09 - K68");
+        UART_TRAN_BYTE(13);
+        UART_TRAN_BYTE(10);
+
+        UART_TRAN_STR("Vien DTVT, Truong DHBK HN");
+        UART_TRAN_BYTE(13);
+        UART_TRAN_BYTE(10);
+
+        UART_TRAN_BYTE(13);
+        UART_TRAN_BYTE(10);
+
+        /*
+         * Mỗi 1 giây dịch LCD sang trái 1 bước.
+         */
+        DELAY_MS(1000);
+        LCD4_DIS_SHIFT(1, 1);
+
+        shift_count++;
+
+        /*
+         * Sau một số lần dịch, reset lại màn hình để chữ quay về đầu.
+         */
+        if (shift_count >= 20)
+        {
+            shift_count = 0;
+
+            LCD4_OUT_CMD(0x01);
+
+            LCD4_CUR_GOTO(1, 0);
+            LCD4_OUT_STR("Tran Ngoc Dung, Dien tu 09 - K68");
+
+            LCD4_CUR_GOTO(2, 0);
+            LCD4_OUT_STR("Vien DTVT, Truong DHBK HN");
         }
     }
 }
